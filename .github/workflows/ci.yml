@@ -28,6 +28,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Check the workflows themselves
+        shell: bash
+        run: bash scripts/check-workflows.sh
+
       - name: Format check
         run: cargo fmt --all -- --check
 

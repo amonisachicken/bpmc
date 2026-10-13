@@ -132,6 +132,8 @@ cargo run --example render_demo -- --check   # CI 用的烟雾检查
 | `examples/render_demo.rs` | 无 TTY 的渲染自检 |
 | `scripts/check.sh` | 测试 + clippy + 发布构建 + 渲染自检 |
 | `scripts/ci-local.sh` | 本地逐条复现 CI 步骤 |
+| `scripts/run-release-steps.sh` | 本地模拟发布 job，矩阵直接从工作流文件读取 |
+| `scripts/check-workflows.sh` | 工作流文件结构与其构建矩阵的静态检查 |
 | `.github/workflows/ci.yml` | CI：Linux / Windows / macOS 测试与构建 |
 | `.github/workflows/release.yml` | 打 `v*` tag 时构建二进制并发布 Release |
 

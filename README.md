@@ -130,6 +130,8 @@ Layout:
 | `examples/render_demo.rs` | TTY-free render check |
 | `scripts/check.sh` | Tests + clippy + release build + render check |
 | `scripts/ci-local.sh` | Replays every CI step locally |
+| `scripts/run-release-steps.sh` | Simulates the release job locally, reading its matrix from the workflow |
+| `scripts/check-workflows.sh` | Structural check of the workflow files and their build matrix |
 | `.github/workflows/ci.yml` | CI: test and build on Linux, Windows, macOS |
 | `.github/workflows/release.yml` | On a `v*` tag: build binaries and publish a release |
 

@@ -3,6 +3,14 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Manual run: builds and packages every target without touching a release,
+  # which is how this workflow itself is tested.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and package only; do not create or upload a release"
+        type: boolean
+        default: true
 
 # Required so the job may create the GitHub Release.
 permissions:
@@ -12,7 +20,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # One guard job, so a mistyped tag fails in seconds instead of after three
+  # One guard job, so a mistyped tag fails in seconds instead of after four
   # platform builds.
   tag:
     name: check tag
@@ -24,13 +32,19 @@ jobs:
 
       - name: Tag must match Cargo.toml version
         id: check
+        shell: bash
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          set -euo pipefail
           manifest=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          echo "tag=$GITHUB_REF_NAME  cargo version=$manifest"
-          if [ "$tag" != "$manifest" ]; then
-            echo "::error::tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${manifest}"
-            exit 1
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            echo "tag=$GITHUB_REF_NAME  cargo version=$manifest"
+            if [ "$tag" != "$manifest" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $manifest"
+              exit 1
+            fi
+          else
+            echo "manual run on ${GITHUB_REF_NAME}: packaging version $manifest"
           fi
           echo "version=$manifest" >> "$GITHUB_OUTPUT"
 
@@ -42,22 +56,28 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `bin` must match what `cargo build --target <triple>` produces:
+          # passing --target moves the output under target/<triple>/release/.
           - name: linux-x86_64
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            bin: target/release/bpmc
+            bin: target/x86_64-unknown-linux-gnu/release/bpmc
+            ext: tar.gz
           - name: macos-x86_64
             os: macos-latest
             target: x86_64-apple-darwin
             bin: target/x86_64-apple-darwin/release/bpmc
+            ext: tar.gz
           - name: macos-aarch64
             os: macos-latest
             target: aarch64-apple-darwin
             bin: target/aarch64-apple-darwin/release/bpmc
+            ext: tar.gz
           - name: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: target/x86_64-pc-windows-msvc/release/bpmc.exe
+            ext: zip
 
     steps:
       - uses: actions/checkout@v4
@@ -73,12 +93,30 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build
+        shell: bash
         run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # Fail here with a readable message instead of failing in the packaging
+      # step, which is where a wrong `bin` path shows up as a confusing
+      # "cp: cannot stat".
+      - name: Check the binary exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "${{ matrix.bin }}" ]; then
+            echo "::error::expected binary not found: ${{ matrix.bin }}"
+            echo "--- what target/ actually contains ---"
+            ls -la target target/release 2>/dev/null || true
+            find target -maxdepth 3 -name 'bpmc*' -type f 2>/dev/null || true
+            exit 1
+          fi
+          ls -la "${{ matrix.bin }}"
 
       - name: Package (unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
+          set -euo pipefail
           version="${{ needs.tag.outputs.version }}"
           name="bpmc-${version}-${{ matrix.name }}"
           mkdir -p "dist/$name"
@@ -86,13 +124,14 @@ jobs:
           cp README.md LICENSE "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           rm -rf "dist/$name"
-          cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
-          ls -la dist || ls -la .
+          (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+          ls -la dist
 
       - name: Package (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $version = "${{ needs.tag.outputs.version }}"
           $name = "bpmc-$version-${{ matrix.name }}"
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
@@ -104,11 +143,20 @@ jobs:
           "$hash  $name.zip" | Out-File -Encoding ascii "dist/$name.zip.sha256"
           Get-ChildItem dist
 
+      - name: Keep the packages as run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
       - name: Upload to the release
+        if: github.ref_type == 'tag'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           tag="$GITHUB_REF_NAME"
           gh release view "$tag" >/dev/null 2>&1 || \
             gh release create "$tag" --title "$tag" --generate-notes --verify-tag

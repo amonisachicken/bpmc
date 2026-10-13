@@ -56,11 +56,21 @@ def deep_check(path, doc):
                     f"{path}/{job_name}: run step without explicit shell "
                     f"(default differs between Linux and Windows runners)"
                 )
+        problems += check_release_matrix(path, job_name, job)
+    return problems
+
+
+def check_release_matrix(path, job_name, job):
+    """Apply the matrix checks to a parsed job."""
+    problems = []
+    entries = (((job.get("strategy") or {}).get("matrix") or {}).get("include")) or []
+    for entry in entries:
+        problems += check_matrix_entry(path, job_name, entry)
     return problems
 
 
 def shallow_check(path, text):
-    """Indentation sanity check used when PyYAML is unavailable."""
+    """Indentation sanity check plus a matrix check, used without PyYAML."""
     problems = []
     for lineno, raw in enumerate(text.splitlines(), 1):
         if "\t" in raw:
@@ -76,6 +86,57 @@ def shallow_check(path, text):
     for key in ("name:", "on:", "jobs:"):
         if not any(line.startswith(key) for line in text.splitlines()):
             problems.append(f"{path}: no top-level '{key}'")
+
+    # Minimal matrix reader: enough for the flat `include:` lists used here.
+    # Only entries carrying both `target` and `bin` are treated as matrix rows,
+    # which keeps step definitions (also `- name: ...` lists) out of the way.
+    import re
+
+    candidates, current = [], None
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if re.match(r"^-?\s*-\s+name:\s*\S+", stripped) or stripped.startswith("- name:"):
+            if current:
+                candidates.append(current)
+            current = {"name": stripped.split("name:", 1)[1].strip()}
+            continue
+        if current is not None:
+            m = re.match(r"(os|target|bin|ext):\s*(\S+)", stripped)
+            if m:
+                current[m.group(1)] = m.group(2)
+            elif stripped.startswith("- "):
+                # A sibling list item, not a field of this entry.
+                candidates.append(current)
+                current = None
+    if current:
+        candidates.append(current)
+
+    for entry in candidates:
+        if "target" in entry and "bin" in entry:
+            problems += check_matrix_entry(path, "release matrix", entry)
+    return problems
+
+
+def check_matrix_entry(path, job_name, entry):
+    """Shared by the PyYAML and the minimal path."""
+    problems = []
+    name = entry.get("name", "?")
+    target = entry.get("target", "")
+    binary = entry.get("bin", "")
+    if not target or not binary:
+        problems.append(f"{path}/{job_name}/{name}: needs both target and bin")
+        return problems
+    expected = f"target/{target}/release/"
+    if not binary.startswith(expected):
+        problems.append(
+            f"{path}/{job_name}/{name}: bin is '{binary}' but --target {target} "
+            f"writes to '{expected}...'"
+        )
+    if "windows" in target and not binary.endswith(".exe"):
+        problems.append(f"{path}/{job_name}/{name}: windows bin must end in .exe")
+    if "windows" not in target and binary.endswith(".exe"):
+        problems.append(f"{path}/{job_name}/{name}: non-windows bin must not end in .exe")
+    print(f"   matrix {name}: {target} -> {binary} [ok]")
     return problems
 
 
