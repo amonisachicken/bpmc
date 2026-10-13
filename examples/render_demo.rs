@@ -13,7 +13,7 @@
 
 use std::io;
 
-use bpmc::app::App;
+use bpmc::app::{App, HISTORY_LEN};
 use bpmc::i18n::Lang;
 use bpmc::ui;
 use ratatui::backend::TestBackend;
@@ -56,12 +56,20 @@ fn main() -> io::Result<()> {
     } else {
         Lang::En
     };
-    // A session with a plausible tempo: eight taps at 120 BPM, one late tap
-    // (a hiccup), so the jitter figure is non-zero.
+    // A session past the point where the graph window has filled up: the last
+    // `HISTORY_LEN` intervals are kept and the oldest ones are dropped, so this
+    // is exactly the case that used to freeze. Cycling through four tempos keeps
+    // the bars visually distinct, which makes the rolling window obvious.
     let mut app = App::new();
     app.seed(500);
-    for i in 0..8 {
-        app.tick(if i == 5 { 620.0 } else { 500.0 });
+    for i in 0..(HISTORY_LEN * 2) {
+        let delta = match i % 4 {
+            0 => 460.0,
+            1 => 300.0,
+            2 => 520.0,
+            _ => 380.0,
+        };
+        app.tick(delta);
         app.tap();
     }
     // The pulse would normally have decayed away by the time we render.
