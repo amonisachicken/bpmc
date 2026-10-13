@@ -30,7 +30,7 @@ to the beat** and the UI shows the current BPM in real time. Press `q` to quit.
 - Real-time BPM from space-bar taps
 - Rolling window over the last 12 intervals (stable, but reacts quickly)
 - Tap count, last interval, and jitter (standard deviation of intervals)
-- Bar graph of the interval history
+- Bar graph of the interval history: the last 20 beats, oldest dropped as new ones arrive
 - Auto-detects idle after 3 s without a tap
 - `r` resets the measurement
 - Chinese / English UI chosen automatically from the locale

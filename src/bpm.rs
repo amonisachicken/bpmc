@@ -59,29 +59,45 @@ impl TapTracker {
     }
 
     /// Record one tap at `now_ms` (a monotonic timestamp in milliseconds).
-    pub fn tap(&mut self, now_ms: u128) {
-        if let Some(&last) = self.taps.back() {
+    ///
+    /// Returns the interval this tap completed, or `None` when the tap was
+    /// rejected: a duplicate/autorepeat (too fast), the first tap, or a tap
+    /// that restarted the measurement after a long pause.
+    ///
+    /// Callers must use this return value instead of comparing queue lengths:
+    /// the interval queue is capped at [`WINDOW`], so once it is full its length
+    /// stops changing even though new intervals keep replacing old ones.
+    pub fn tap(&mut self, now_ms: u128) -> Option<f64> {
+        let recorded = if let Some(&last) = self.taps.back() {
             let delta = now_ms.saturating_sub(last) as f64;
             if delta > MAX_INTERVAL_MS {
                 // Long pause: restart the measurement from this tap.
                 self.taps.clear();
                 self.intervals.clear();
                 self.resets += 1;
+                None
             } else if delta >= MIN_INTERVAL_MS {
                 self.intervals.push_back(delta);
                 while self.intervals.len() > WINDOW {
                     self.intervals.pop_front();
                 }
+                Some(delta)
             } else {
                 // Too fast to be a deliberate tap: ignore it entirely rather
                 // than letting it dominate the average.
-                return;
+                return None;
             }
-        }
+        } else {
+            // First tap of a measurement: it is only an anchor.
+            None
+        };
+
         self.taps.push_back(now_ms);
         while self.taps.len() > WINDOW {
             self.taps.pop_front();
         }
+
+        recorded
     }
 
     /// Total number of taps recorded in this session (including ones that
@@ -252,6 +268,32 @@ mod tests {
         t.tap(1_500);
         let bpm = t.bpm().unwrap();
         assert!((bpm - 120.0).abs() < 1e-9, "got {bpm}");
+    }
+
+    #[test]
+    fn tap_reports_the_interval_it_recorded() {
+        let mut t = TapTracker::new();
+        // First tap is only an anchor.
+        assert_eq!(t.tap(0), None);
+        assert_eq!(t.tap(500), Some(500.0));
+        // Rejected taps report nothing.
+        assert_eq!(t.tap(505), None);
+        // A long pause restarts the measurement and reports nothing.
+        assert_eq!(t.tap(10_000), None);
+        assert_eq!(t.bpm(), None);
+    }
+
+    #[test]
+    fn full_window_still_reports_new_intervals() {
+        // The queue length stops changing at WINDOW, but every accepted tap must
+        // still report its interval so callers can keep a longer history.
+        let mut t = TapTracker::new();
+        t.tap(0);
+        for i in 1..=(WINDOW as u128 + 5) {
+            let at = i * 500;
+            assert_eq!(t.tap(at), Some(500.0), "tap {i} should report its interval");
+        }
+        assert_eq!(t.intervals().count(), WINDOW);
     }
 
     #[test]

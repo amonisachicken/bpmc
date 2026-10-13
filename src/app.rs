@@ -8,8 +8,13 @@ pub const PULSE_MS: f64 = 130.0;
 /// After this long without a tap the reading is reported as idle.
 pub const IDLE_AFTER_MS: u128 = 3_000;
 
-/// Number of interval bars kept for the history graph.
-pub const HISTORY_LEN: usize = 64;
+/// Number of intervals kept for the history graph.
+///
+/// This is a rolling window: once it is full the oldest interval is dropped on
+/// every tap, so the graph keeps scrolling instead of freezing. The graph only
+/// draws as many bars as the terminal is wide, so 20 is already more than fits
+/// on most windows while still giving a useful "how steady am I" picture.
+pub const HISTORY_LEN: usize = 20;
 
 pub struct App {
     pub tracker: TapTracker,
@@ -68,18 +73,16 @@ impl App {
 
     /// Register one space-bar tap.
     pub fn tap(&mut self) {
-        // The tracker is the authority on whether this tap counts: a dupe or an
-        // autorepeat does not add an interval, and must not add a history bar.
-        let before = self.tracker.intervals().count();
-        self.tracker.tap(self.elapsed_ms);
+        // The tracker decides whether this tap counts and hands back the
+        // interval it completed. Comparing queue lengths here would be wrong:
+        // the tracker's queue is capped, so its length stops changing once full.
+        let interval = self.tracker.tap(self.elapsed_ms);
         self.pulse = 1.0;
         self.total_taps += 1;
-        if self.tracker.intervals().count() > before {
-            if let Some(interval) = self.tracker.last_interval() {
-                self.history.push(interval);
-                if self.history.len() > HISTORY_LEN {
-                    self.history.remove(0);
-                }
+        if let Some(interval) = interval {
+            self.history.push(interval);
+            if self.history.len() > HISTORY_LEN {
+                self.history.remove(0);
             }
         }
         self.message = None;
@@ -191,6 +194,44 @@ mod tests {
         let mut app = App::new();
         app.tap();
         assert_eq!(app.status(), Status::Measuring);
+    }
+
+    #[test]
+    fn the_reading_keeps_tracking_after_the_windows_are_full() {
+        // Regression: history used to be appended based on the tracker's queue
+        // length, which stops changing once that queue is full. The graph then
+        // froze and, because the tracker also feeds the BPM average, the reading
+        // stuck at whatever it was when the queue filled.
+        let mut app = App::new();
+        app.seed(500);
+        app.tap();
+
+        // Long enough to fill both the tracker window (12) and the graph (20).
+        for _ in 0..300 {
+            app.tick(500.0);
+            app.tap();
+        }
+        let slow = app.bpm().expect("reading");
+        assert!(
+            (slow - 120.0).abs() < 1e-6,
+            "steady 500 ms taps: got {slow}"
+        );
+        assert_eq!(app.history.len(), HISTORY_LEN);
+
+        // Double the tempo: the reading must follow, not stay stuck.
+        for _ in 0..100 {
+            app.tick(250.0);
+            app.tap();
+        }
+        let fast = app.bpm().expect("reading");
+        assert!((fast - 240.0).abs() < 1e-6, "after speeding up: got {fast}");
+
+        // And the history must hold the newest intervals, not old ones.
+        assert!(
+            app.history.iter().all(|v| (*v - 250.0).abs() < 1e-6),
+            "history still held stale intervals: {:?}",
+            app.history
+        );
     }
 
     #[test]
