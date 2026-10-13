@@ -1,10 +1,13 @@
-# bpmc · BPM 计数器
+# bpmc
 
-一个用 Rust 写的终端 BPM（每分钟节拍数）计数器：**跟着节拍按空格键**，
-界面实时显示当前 BPM。按 `q` 退出。
+**English** · [简体中文](README.zh-CN.md)
 
-A terminal BPM counter written in Rust: **tap the space bar to the beat**
-and the UI shows the current BPM in real time. Press `q` to quit.
+[![CI](https://github.com/amonisachicken/bpmc/actions/workflows/ci.yml/badge.svg)](https://github.com/amonisachicken/bpmc/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/amonisachicken/bpmc?display_name=tag&sort=semver)](https://github.com/amonisachicken/bpmc/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+A terminal BPM (beats per minute) counter written in Rust: **tap the space bar
+to the beat** and the UI shows the current BPM in real time. Press `q` to quit.
 
 ```
         ███ ███ ███
@@ -12,42 +15,50 @@ and the UI shows the current BPM in real time. Press `q` to quit.
         ███ ███ ███
           █ █ █   █
         ███ ███ ███
-         BPM 计数器 · 就绪
+        BPM Counter · Ready.
 
-        按键次数     最近间隔      抖动
-           12        500 ms      ±7 ms
+        Taps      Last interval      Jitter
+          12           500 ms         ±7 ms
 
      ▁▂▃▄▅▆▇█▇▆▅▄▃▂▁▂▃▄▅▆▇█ ...
 
-    空格  计数      q / Esc  退出      r  重置
+     Space  tap    q / Esc  quit    r  reset
 ```
 
-## 功能 / Features
+## Features
 
-| 功能 | Feature |
-| --- | --- |
-| 按空格键实时显示 BPM | Real-time BPM from space-bar taps |
-| 滚动窗口取最近 12 次敲击的平均间隔 | Rolling window over the last 12 intervals |
-| 显示按键次数、最近间隔、抖动（间隔标准差） | Tap count, last interval, jitter (std. dev.) |
-| 间隔柱状图历史 | Bar graph of recent intervals |
-| 长时间不按自动标记为空闲 | Auto-detects idle after 3 s |
-| 按 `r` 重置 | `r` resets the measurement |
-| 中英文界面自动切换 | Automatic Chinese / English UI |
-| 跨平台：Windows / Linux / macOS | Cross-platform: Windows / Linux / macOS |
+- Real-time BPM from space-bar taps
+- Rolling window over the last 12 intervals (stable, but reacts quickly)
+- Tap count, last interval, and jitter (standard deviation of intervals)
+- Bar graph of the interval history
+- Auto-detects idle after 3 s without a tap
+- `r` resets the measurement
+- Chinese / English UI chosen automatically from the locale
+- Cross-platform: Windows / Linux / macOS
 
-## 安装与运行 / Build and run
+## Install
 
-需要 Rust 工具链（`cargo`）。
+**Prebuilt binaries** for Linux, macOS and Windows are attached to every
+[release](https://github.com/amonisachicken/bpmc/releases). Download the archive
+for your platform, unpack it, and put `bpmc` somewhere on your `PATH`.
+
+From source, straight from git:
+
+```bash
+cargo install --git https://github.com/amonisachicken/bpmc.git
+```
+
+Or clone and run:
 
 ```bash
 git clone git@github.com:amonisachicken/bpmc.git   # SSH
-# 或： git clone https://github.com/amonisachicken/bpmc.git
+# or: git clone https://github.com/amonisachicken/bpmc.git
 cd bpmc
 
 cargo run --release
 ```
 
-或者构建后直接运行二进制：
+Building yourself and running the binary directly:
 
 ```bash
 cargo build --release
@@ -55,88 +66,89 @@ cargo build --release
 .\target\release\bpmc.exe    # Windows
 ```
 
-也可以安装到 `~/.cargo/bin`：
+Requires a Rust toolchain (`cargo`). Built and tested with stable Rust.
 
-```bash
-cargo install --path .
-bpmc
-```
+## Usage
 
-## 按键 / Keys
-
-| 键 | 动作 |
+| Key | Action |
 | --- | --- |
-| `Space` | 记录一次敲击（计数） |
-| `r` | 重置当前测量 |
-| `q` / `Esc` / `Ctrl-C` | 退出 |
+| `Space` | Record a tap (counts toward the BPM) |
+| `r` | Reset the current measurement |
+| `q` / `Esc` / `Ctrl-C` | Quit |
 
-> 提示：BPM = 60000 ÷ 平均间隔（毫秒）。如果你想要 120 BPM，
-> 就每秒敲两次（间隔 500 ms）。
+> Tip: BPM = 60000 ÷ mean interval in ms. For 120 BPM, tap twice per second
+> (500 ms apart).
 
-## 语言 / Language
+## Language
 
-界面语言由本地化环境变量决定：
+The UI language comes from the localization environment:
 
-- 依次检查 `LC_ALL` → `LC_MESSAGES` → `LANG`
-- 任一变量（不区分大小写）**包含 `zh`** → 中文界面
-- 否则 → 英文界面
-
-```bash
-LANG=zh_CN.UTF-8 cargo run --release    # 中文
-LANG=en_US.UTF-8 cargo run --release    # English
-```
-
-Windows 上通常没有 `LANG`，所以默认是英文；可以用
-`$env:LANG="zh_CN.UTF-8"`（PowerShell）临时切换。
-
-## 跨平台说明 / Platform notes
-
-代码只依赖 [`ratatui`](https://crates.io/crates/ratatui) 以及它重导出的
-[`crossterm`](https://crates.io/crates/crossterm)，两者都支持 Windows
-（含 Windows Terminal / ConHost）、Linux 和各种 Unix 终端、macOS。
-没有平台相关的 `cfg` 分支，也没有 unsafe 代码。
-
-终端需要支持 UTF-8 和 256 色/真彩色才能完整显示方块数字与柱状图；
-若窗口太小会退化为一行提示或纯数字显示。
-
-## 开发 / Development
+- checks `LC_ALL` → `LC_MESSAGES` → `LANG`, in that order
+- if any of them **contains `zh`** (case-insensitive) → Chinese UI
+- otherwise → English UI
 
 ```bash
-cargo test      # 单元测试：BPM 计算、空闲判定、语言探测、状态机
-cargo clippy --all-targets
-
-# 无需真实终端的渲染自检：把界面画进内存缓冲区并打印出来
-cargo run --example render_demo          # 英文
-cargo run --example render_demo -- zh    # 中文
-cargo run --example render_demo -- --check   # 只做烟雾检查（CI 用）
+LANG=zh_CN.UTF-8 cargo run --release    # 中文界面
+LANG=en_US.UTF-8 cargo run --release    # English UI
 ```
 
-代码结构：
+On Windows `LANG` is usually unset, so the default is English; switch it per
+session with `$env:LANG="zh_CN.UTF-8"` in PowerShell.
 
-| 文件 | 职责 |
+## Platform notes
+
+The code depends only on [`ratatui`](https://crates.io/crates/ratatui) and the
+[`crossterm`](https://crates.io/crates/crossterm) it re-exports. Both support
+Windows (Windows Terminal and ConHost), Linux and other Unix terminals, and
+macOS. There are no platform-specific `cfg` branches and no `unsafe` code.
+
+The terminal needs UTF-8 and 256-colour/true-colour support for the block
+digits and the bar graph; a very small window degrades to a single line of text.
+
+## Development
+
+```bash
+cargo test                                    # unit tests
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all -- --check
+
+# Headless render check: draws the UI into an in-memory buffer and prints it.
+cargo run --example render_demo              # English layouts
+cargo run --example render_demo -- zh        # Chinese layouts
+cargo run --example render_demo -- --check   # smoke test used by CI
+```
+
+Layout:
+
+| Path | Responsibility |
 | --- | --- |
-| `src/main.rs` | 终端初始化/清理、事件循环、按键处理 |
-| `src/app.rs` | 应用状态（时钟、脉冲动画、计数、历史） |
-| `src/bpm.rs` | 敲击时间戳 → BPM 的估算逻辑（含单元测试） |
-| `src/i18n.rs` | 中英文字符串表与语言探测 |
-| `src/ui.rs` | 所有绘制逻辑 |
-| `examples/render_demo.rs` | 无 TTY 的渲染自检 |
-| `scripts/check.sh` | 一键跑测试 + clippy + 发布构建 + 渲染自检 |
-| `scripts/ci-local.sh` | 本地复现 CI 的全部步骤 |
-| `.github/workflows/ci.yml` | GitHub Actions：Linux / Windows / macOS 三平台测试与构建 |
+| `src/main.rs` | Terminal setup/teardown, event loop, key handling |
+| `src/app.rs` | Session state: clock, pulse animation, tap count, history |
+| `src/bpm.rs` | Turning tap timestamps into a BPM estimate (unit-tested) |
+| `src/i18n.rs` | Chinese/English string tables and locale detection |
+| `src/ui.rs` | All drawing |
+| `examples/render_demo.rs` | TTY-free render check |
+| `scripts/check.sh` | Tests + clippy + release build + render check |
+| `scripts/ci-local.sh` | Replays every CI step locally |
+| `.github/workflows/ci.yml` | CI: test and build on Linux, Windows, macOS |
+| `.github/workflows/release.yml` | On a `v*` tag: build binaries and publish a release |
 
-### 关于 Windows 上的 MSYS2 构建
+<details>
+<summary>Building on Windows with MSYS2</summary>
 
-若使用 MSYS2 的 clang64 Rust 工具链，链接步骤（`windows-gnu`）需要
-`dlltool.exe`，它只在 mingw64 树里，因此 `PATH` 需要同时包含两者：
+With MSYS2's clang64 Rust toolchain, the `windows-gnu` link step needs
+`dlltool.exe`, which only ships in the mingw64 tree, so `PATH` must contain
+both prefixes:
 
 ```bash
 export PATH=/clang64/bin:/mingw64/bin:/usr/bin:/bin:$PATH
 ```
 
-`scripts/build.sh` 与 `scripts/check.sh` 已封装该设置。使用 rustup 默认的
-MSVC 工具链时不需要这些。
+`scripts/build.sh` and `scripts/check.sh` already do this. With rustup's
+default MSVC toolchain none of it is needed.
+
+</details>
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

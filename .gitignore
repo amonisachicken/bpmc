@@ -1,6 +1,9 @@
 # Building artifacts
 /target
 
+# Release packaging output (produced by scripts/release-dry-run.*)
+/dist
+
 # Editor / OS noise
 *.swp
 .DS_Store
