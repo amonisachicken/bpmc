@@ -1,0 +1,7 @@
+# Building artifacts
+/target
+
+# Editor / OS noise
+*.swp
+.DS_Store
+Thumbs.db

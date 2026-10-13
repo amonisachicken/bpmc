@@ -1,0 +1,21 @@
+[package]
+name = "bpmc"
+version = "0.1.0"
+edition = "2021"
+description = "A real-time BPM counter TUI: tap the space bar and watch your BPM."
+license = "MIT"
+repository = "https://github.com/amonisachicken/bpmc"
+keywords = ["tui", "bpm", "metronome", "cli"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+# `ratatui` re-exports the crossterm version it was built against, so the
+# terminal backend and the event reader can never drift apart. No separate
+# crossterm dependency is needed.
+ratatui = "0.30"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
