@@ -1,6 +1,6 @@
 [package]
 name = "bpmc"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A real-time BPM counter TUI: tap the space bar and watch your BPM."
 license = "MIT"
