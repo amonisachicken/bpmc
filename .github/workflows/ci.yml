@@ -33,18 +33,23 @@ jobs:
         run: bash scripts/check-workflows.sh
 
       - name: Format check
+        shell: bash
         run: cargo fmt --all -- --check
 
       - name: Clippy
+        shell: bash
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
+        shell: bash
         run: cargo test --all-targets
 
       - name: Headless render smoke test
+        shell: bash
         run: cargo run --example render_demo -- --check
 
       - name: Build release binary
+        shell: bash
         run: cargo build --release
 
       - name: Upload binary

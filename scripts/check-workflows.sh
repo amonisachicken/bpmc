@@ -35,15 +35,27 @@ except ImportError:
 def deep_check(path, doc):
     """Checks that only make sense once the file parsed."""
     problems = []
-    for key in ("name", "on", "jobs"):
-        if key not in doc:
-            problems.append(f"{path}: missing top-level '{key}'")
+    # `on:` is parsed as the boolean True by YAML 1.1 parsers, so match either.
+    if "name" not in doc:
+        problems.append(f"{path}: missing top-level 'name'")
+    if not any(k in doc for k in ("on", True)):
+        problems.append(f"{path}: missing top-level 'on'")
+    if "jobs" not in doc:
+        problems.append(f"{path}: missing top-level 'jobs'")
     print(f"== {path}")
     print(f"   name: {doc.get('name')}")
-    print(f"   on:   {doc.get('on')}")
+    print(f"   on:   {doc.get('on') if 'on' in doc else doc.get(True)}")
     for job_name, job in (doc.get("jobs") or {}).items():
         steps = job.get("steps") or []
-        print(f"   job {job_name}: {len(steps)} steps on {job.get('runs-on')}")
+        runs_on = str(job.get("runs-on", ""))
+        matrix = ((job.get("strategy") or {}).get("matrix") or {})
+        # `runs-on` is often an expression, so expand the matrix (and its plain
+        # list values) to find out whether any leg runs on Windows.
+        candidates = [runs_on] + [str(v) for v in matrix.get("os", []) or []]
+        candidates += [str(e.get("os", "")) for e in matrix.get("include", []) or []]
+        windows_possible = any("windows" in c.lower() for c in candidates)
+        print(f"   job {job_name}: {len(steps)} steps on {runs_on}"
+              f"{' (windows possible)' if windows_possible else ''}")
         for step in steps:
             if not isinstance(step, dict):
                 problems.append(f"{path}/{job_name}: step is not a mapping")
@@ -51,10 +63,12 @@ def deep_check(path, doc):
             has_uses, has_run = "uses" in step, "run" in step
             if has_uses == has_run:
                 problems.append(f"{path}/{job_name}: step needs exactly one of uses/run")
-            if has_run and "shell" not in step:
+            # GitHub's default shell is bash on Linux/macOS but pwsh on Windows,
+            # so a missing shell is only a problem where a Windows leg can run.
+            if has_run and "shell" not in step and windows_possible:
                 problems.append(
-                    f"{path}/{job_name}: run step without explicit shell "
-                    f"(default differs between Linux and Windows runners)"
+                    f"{path}/{job_name}: run step without an explicit shell, but this "
+                    f"job can run on Windows (the default there is pwsh)"
                 )
         problems += check_release_matrix(path, job_name, job)
     return problems
